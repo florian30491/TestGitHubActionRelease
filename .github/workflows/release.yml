@@ -1,13 +1,9 @@
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       release-version-string:
         type: string
         required: true
-    secrets:
-      my-token:
-        required: false
-        description: "test"
   
 jobs:
   publish-new-latex-release:
@@ -33,4 +29,4 @@ jobs:
           tag: ${{ steps.tag_version.outputs.new_tag }}
           name: ${{ steps.tag_version.outputs.new_version }}
           artifacts: "README.md"
-          token: ${{ secrets.my-token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
