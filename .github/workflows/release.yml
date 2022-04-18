@@ -1,0 +1,85 @@
+on:
+  workflow_call:
+    inputs:
+      input-file-name:
+        type: string
+        required: true
+        description: "name of the input file "
+       
+      working-directory:
+        type: string
+        required: true
+        description: "working directory for latex file compilation"
+      output-file-name:
+        type: string
+        required: true
+        description: "asdfasdf"
+    secrets:
+      my-token:
+        required: true
+        description: "test"
+  
+jobs:
+  publish-new-latex-release:
+    name: Publish new LaTeX release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    #if: github.event.pull_request.merged == true # only merged pull requests must trigger this job
+    steps:
+      - name: Extract version from branch name (for release branches)
+        if: startsWith(github.event.pull_request.head.ref, 'release/')
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH_NAME#release/}
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+          
+      - name: Extract version from branch name (for hotfix branches)
+        if: startsWith(github.event.pull_request.head.ref, 'hotfix/')
+        run: |
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION=${BRANCH_NAME#hotfix/}
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
+          
+      - uses: actions/checkout@v2
+      
+      - name: Push tag '${{ env.RELEASE_VERSION }}'
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ env.RELEASE_VERSION }}
+          
+      - name: Github Action for LaTeX
+        uses: xu-cheng/latex-action@v2
+        with:
+          root_file: ${{ inputs.input-file-name}}
+          working_directory: ${{ inputs.working-directory}}
+            
+      - name: Github Action for LaTeX with makeglossaries
+        uses: xu-cheng/latex-action@v2
+        with:
+          root_file: ${{ inputs.input-file-name}}
+          working_directory: ${{ inputs.working-directory}}
+          pre_compile: | 
+            ln -sf /opt/texlive/texdir/texmf-dist/scripts/xindy/xindy.pl /opt/texlive/texdir/bin/x86_64-linuxmusl/xindy
+            ln -sf /opt/texlive/texdir/texmf-dist/scripts/xindy/texindy.pl /opt/texlive/texdir/bin/x86_64-linuxmusl/texindy
+            wget https://sourceforge.net/projects/xindy/files/xindy-source-components/2.4/xindy-kernel-3.0.tar.gz
+            tar xf xindy-kernel-3.0.tar.gz
+            cd xindy-kernel-3.0/src
+            apk add make
+            apk add clisp --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
+            make
+            cp -f xindy.mem /opt/texlive/texdir/bin/x86_64-linuxmusl/
+            cd ../../
+            file=${{ inputs.input-file-name}}
+            makeglossaries ${file%.*}
+      
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          tag: ${{ steps.tag_version.outputs.new_tag }}
+          name: ${{ steps.tag_version.outputs.new_version }}
+          artifacts: "README.md"
+          token: ${{ secrets.my-token }}
